@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Gamepad2, Lock, User, KeyRound, ShieldAlert } from 'lucide-react';
+import { Lock, User, KeyRound, ShieldAlert } from 'lucide-react';
 
 export const LoginPage = () => {
   const { login } = useApp();
@@ -33,9 +33,7 @@ export const LoginPage = () => {
     <div className="login-backdrop">
       <div className="login-card">
         <div className="login-header">
-          <div className="login-logo-icon">
-            <Gamepad2 size={38} className="neon-icon" />
-          </div>
+          <img src="/logo.png" alt="PS MANAGER Logo" className="login-logo-img" />
           <h2 className="login-title">
             <span className="logo-ps">PS</span> MANAGER
           </h2>

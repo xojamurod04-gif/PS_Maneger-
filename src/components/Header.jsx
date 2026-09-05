@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Gamepad2, MonitorPlay, AlertTriangle, UserCheck, LogOut } from 'lucide-react';
+import { MonitorPlay, AlertTriangle, UserCheck, LogOut } from 'lucide-react';
 
 export const Header = () => {
   const {
@@ -30,9 +30,7 @@ export const Header = () => {
     <header className="header-container">
       <div className="header-left">
         <div className="logo-box">
-          <div className="logo-icon">
-            <Gamepad2 size={28} className="neon-icon" />
-          </div>
+          <img src="/logo.png" alt="PS MANAGER Logo" className="logo-img" />
           <div>
             <h1 className="logo-title">
               <span className="logo-ps">PS</span> MANAGER

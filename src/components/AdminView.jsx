@@ -16,16 +16,19 @@ import {
   Search,
   RefreshCw,
   Users,
-  KeyRound,
   PowerOff,
   Clock,
   ShieldCheck,
   UserPlus,
+  UserX,
+  Laptop,
 } from 'lucide-react';
 
 export const AdminView = () => {
   const {
     usersList,
+    activeLogins,
+    kickUserLoginSession,
     addBarmen,
     updateBarmen,
     deleteBarmen,
@@ -40,7 +43,7 @@ export const AdminView = () => {
     addDevice,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState('live_devices'); // 'live_devices' | 'users' | 'reports' | 'inventory' | 'devices' | 'history'
+  const [activeTab, setActiveTab] = useState('security'); // 'security' | 'live_devices' | 'users' | 'reports' | 'inventory' | 'devices' | 'history'
 
   // Modals state
   const [showAddBarmenModal, setShowAddBarmenModal] = useState(false);
@@ -149,10 +152,19 @@ export const AdminView = () => {
     setNewDev({ name: '', type: 'ps5', hourly_rate: 25000 });
   };
 
+  const activeLoginCount = activeLogins.filter((l) => l.status === 'active').length;
+
   return (
     <div className="admin-container">
       {/* Navigation tabs */}
       <div className="admin-nav-tabs">
+        <button
+          className={`admin-tab ${activeTab === 'security' ? 'active' : ''}`}
+          onClick={() => setActiveTab('security')}
+        >
+          <ShieldCheck size={18} /> Faol Kirishlar & Xavfsizlik ({activeLoginCount})
+        </button>
+
         <button
           className={`admin-tab ${activeTab === 'live_devices' ? 'active' : ''}`}
           onClick={() => setActiveTab('live_devices')}
@@ -199,7 +211,83 @@ export const AdminView = () => {
         </button>
       </div>
 
-      {/* 1. LIVE CONNECTED COMPUTERS & REMOTE CONTROL TAB */}
+      {/* 1. SECURITY & ACTIVE USER LOGINS MONITOR TAB */}
+      {activeTab === 'security' && (
+        <div className="admin-content-section">
+          <div className="section-toolbar">
+            <div>
+              <h3>Faol Tizim Kirishlari va Xavfsizlik Nazorati (Security Sessions)</h3>
+              <p className="sub-text">
+                Tizimga turli kompyuter va brauzerlardan ulangan barcha foydalanuvchilar. Ruxsatsiz yoki shubhali ulangan akkauntlarni masofadan chiqarib yuborishingiz mumkin.
+              </p>
+            </div>
+          </div>
+
+          <div className="table-responsive">
+            <table className="custom-table">
+              <thead>
+                <tr>
+                  <th>Foydalanuvchi</th>
+                  <th>Roli</th>
+                  <th>Qurilma / Brauzer</th>
+                  <th>Kirgan Vaqti</th>
+                  <th>Holati</th>
+                  <th>Amal (Xavfsizlik)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeLogins.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="no-data">Tizimda hozircha aktiv kirish seanslari mavjud emas.</td>
+                  </tr>
+                ) : (
+                  activeLogins.map((login) => {
+                    const isActive = login.status === 'active';
+                    return (
+                      <tr key={login.id} className={!isActive ? 'row-out' : ''}>
+                        <td className="font-semibold">
+                          <span className="user-name-tag">{login.username}</span>
+                        </td>
+                        <td>
+                          <span className={`role-badge ${login.role}`}>
+                            {login.role === 'admin' ? '👑 Admin' : '🍹 Barmen'}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="device-info-cell">
+                            <Laptop size={16} />
+                            <span>{login.device_info}</span>
+                          </div>
+                        </td>
+                        <td>{formatDateTime(login.login_time)}</td>
+                        <td>
+                          <span className={`status-tag ${isActive ? 'tag-good' : 'tag-out'}`}>
+                            {isActive ? 'FAOL (ONLINE)' : 'CHIQARILGAN (KICKED)'}
+                          </span>
+                        </td>
+                        <td>
+                          {isActive ? (
+                            <button
+                              className="btn-kick-user"
+                              onClick={() => kickUserLoginSession(login.id)}
+                            >
+                              <UserX size={16} /> Tizimdan Majburiy Chiqarish (Kick)
+                            </button>
+                          ) : (
+                            <span className="sub-text">Chiqarilgan</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* 2. LIVE CONNECTED COMPUTERS & REMOTE CONTROL TAB */}
       {activeTab === 'live_devices' && (
         <div className="admin-content-section">
           <div className="section-toolbar">
@@ -281,7 +369,7 @@ export const AdminView = () => {
         </div>
       )}
 
-      {/* 2. BARMEN USERS MANAGEMENT TAB */}
+      {/* 3. BARMEN USERS MANAGEMENT TAB */}
       {activeTab === 'users' && (
         <div className="admin-content-section">
           <div className="section-toolbar">
@@ -354,7 +442,7 @@ export const AdminView = () => {
         </div>
       )}
 
-      {/* 3. FINANCIAL REPORTS & ANALYTICS TAB */}
+      {/* 4. FINANCIAL REPORTS & ANALYTICS TAB */}
       {activeTab === 'reports' && (
         <div className="admin-content-section">
           <div className="kpi-grid">
@@ -408,7 +496,7 @@ export const AdminView = () => {
         </div>
       )}
 
-      {/* 4. INVENTORY & STOCK MANAGEMENT TAB */}
+      {/* 5. INVENTORY & STOCK MANAGEMENT TAB */}
       {activeTab === 'inventory' && (
         <div className="admin-content-section">
           <div className="section-toolbar">
@@ -491,7 +579,7 @@ export const AdminView = () => {
         </div>
       )}
 
-      {/* 5. ROOMS & COMPUTERS SETTINGS TAB */}
+      {/* 6. ROOMS & COMPUTERS SETTINGS TAB */}
       {activeTab === 'devices' && (
         <div className="admin-content-section">
           <div className="section-toolbar">
@@ -528,7 +616,7 @@ export const AdminView = () => {
         </div>
       )}
 
-      {/* 6. COMPLETED SESSIONS HISTORY TAB */}
+      {/* 7. COMPLETED SESSIONS HISTORY TAB */}
       {activeTab === 'history' && (
         <div className="admin-content-section">
           <h3>Yakunlangan Seanslar Tarixi va Checklar</h3>

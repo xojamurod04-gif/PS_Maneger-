@@ -42,6 +42,15 @@ export const AppProvider = ({ children }) => {
     return local ? JSON.parse(local) : null;
   });
 
+  const [currentSessionId, setCurrentSessionId] = useState(() => {
+    return localStorage.getItem('ps_session_id') || null;
+  });
+
+  const [activeLogins, setActiveLogins] = useState(() => {
+    const local = localStorage.getItem('ps_active_logins');
+    return local ? JSON.parse(local) : [];
+  });
+
   const [usersList, setUsersList] = useState(() => {
     const local = localStorage.getItem('ps_users');
     return local ? JSON.parse(local) : INITIAL_USERS;
@@ -82,6 +91,18 @@ export const AppProvider = ({ children }) => {
   }, [currentUser]);
 
   useEffect(() => {
+    if (currentSessionId) {
+      localStorage.setItem('ps_session_id', currentSessionId);
+    } else {
+      localStorage.removeItem('ps_session_id');
+    }
+  }, [currentSessionId]);
+
+  useEffect(() => {
+    localStorage.setItem('ps_active_logins', JSON.stringify(activeLogins));
+  }, [activeLogins]);
+
+  useEffect(() => {
     localStorage.setItem('ps_users', JSON.stringify(usersList));
   }, [usersList]);
 
@@ -101,10 +122,13 @@ export const AppProvider = ({ children }) => {
     localStorage.setItem('ps_completed_sessions', JSON.stringify(completedSessions));
   }, [completedSessions]);
 
-  // Initial Fetch from Supabase
+  // Initial Fetch & Realtime Sync from Supabase
   useEffect(() => {
     const fetchSupabaseData = async () => {
       try {
+        const { data: dbLogins } = await supabase.from('active_logins').select('*');
+        if (dbLogins && dbLogins.length > 0) setActiveLogins(dbLogins);
+
         const { data: dbUsers } = await supabase.from('users').select('*');
         if (dbUsers && dbUsers.length > 0) setUsersList(dbUsers);
 
@@ -128,8 +152,25 @@ export const AppProvider = ({ children }) => {
     fetchSupabaseData();
   }, []);
 
+  // Security Check: Kick Monitor
+  useEffect(() => {
+    if (!currentUser || !currentSessionId) return;
+
+    const checkRevoked = () => {
+      const myLogin = activeLogins.find((l) => l.id === currentSessionId);
+      if (myLogin && myLogin.status === 'revoked') {
+        alert("⚠️ DIQQAT! Sizning kirish seansingiz Administrator tomonidan xavfsizlik yuzasidan majburiy to'xtatildi (Kick/Revoked)!");
+        logout();
+      }
+    };
+
+    checkRevoked();
+    const interval = setInterval(checkRevoked, 2000);
+    return () => clearInterval(interval);
+  }, [currentUser, currentSessionId, activeLogins]);
+
   // Login handler
-  const login = (username, password) => {
+  const login = async (username, password) => {
     const user = usersList.find(
       (u) => u.username.toLowerCase() === username.trim().toLowerCase() && u.password === password
     );
@@ -138,14 +179,68 @@ export const AppProvider = ({ children }) => {
       return { success: false, error: "Login yoki parol noto'g'ri!" };
     }
 
+    const newSessionId = 'sess_login_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+    const deviceInfo = window.navigator.userAgent.includes('Windows')
+      ? 'Windows PC (' + (window.navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser') + ')'
+      : window.navigator.platform || 'Veb Brauzer';
+
+    const loginRecord = {
+      id: newSessionId,
+      user_id: user.id,
+      username: user.username,
+      role: user.role,
+      device_info: deviceInfo,
+      login_time: new Date().toISOString(),
+      status: 'active',
+    };
+
     setCurrentUser(user);
+    setCurrentSessionId(newSessionId);
     setCurrentView(user.role === 'admin' ? 'admin' : 'barmen');
+
+    setActiveLogins((prev) => [loginRecord, ...prev]);
+
+    try {
+      await supabase.from('active_logins').insert([loginRecord]);
+    } catch (e) {
+      console.warn('Supabase active login insert error:', e);
+    }
+
     return { success: true, user };
   };
 
   // Logout handler
-  const logout = () => {
+  const logout = async () => {
+    if (currentSessionId) {
+      setActiveLogins((prev) =>
+        prev.map((l) => (l.id === currentSessionId ? { ...l, status: 'revoked' } : l))
+      );
+      try {
+        await supabase.from('active_logins').update({ status: 'revoked' }).eq('id', currentSessionId);
+      } catch (e) {
+        console.warn('Supabase logout update error:', e);
+      }
+    }
+
     setCurrentUser(null);
+    setCurrentSessionId(null);
+  };
+
+  // Kick / Force Logout user login session (Admin)
+  const kickUserLoginSession = async (sessionId) => {
+    if (!window.confirm("Haqiqatan ham ushbu kirish seansini majburiy to'xtatmoqchimisiz (Kick)?")) {
+      return;
+    }
+
+    setActiveLogins((prev) =>
+      prev.map((l) => (l.id === sessionId ? { ...l, status: 'revoked' } : l))
+    );
+
+    try {
+      await supabase.from('active_logins').update({ status: 'revoked' }).eq('id', sessionId);
+    } catch (e) {
+      console.warn('Supabase kick error:', e);
+    }
   };
 
   // Barmen Account Management (Admin)
@@ -414,7 +509,7 @@ export const AppProvider = ({ children }) => {
     return completedRecord;
   };
 
-  // Admin Remote Force End Session (Terminate / Disconnect active computer)
+  // Admin Remote Force End Session (Terminate active computer)
   const adminForceEndSession = async (deviceId) => {
     if (!window.confirm("Haqiqatan ham ushbu kompyuterdagi seansni masofadan to'xtatmoqchimisiz?")) {
       return;
@@ -495,9 +590,12 @@ export const AppProvider = ({ children }) => {
     <AppContext.Provider
       value={{
         currentUser,
+        currentSessionId,
+        activeLogins,
         usersList,
         login,
         logout,
+        kickUserLoginSession,
         addBarmen,
         updateBarmen,
         deleteBarmen,

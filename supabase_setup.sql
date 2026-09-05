@@ -70,6 +70,17 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- 7. Active Logged-In User Sessions Table (Security Tracking & Kick Control)
+CREATE TABLE IF NOT EXISTS active_logins (
+    id VARCHAR(100) PRIMARY KEY,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    username VARCHAR(100) NOT NULL,
+    role VARCHAR(50) NOT NULL,
+    device_info VARCHAR(255) NOT NULL,
+    login_time TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'active' -- 'active', 'revoked'
+);
+
 -- Row Level Security (RLS) Enable
 ALTER TABLE rooms_computers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
@@ -77,6 +88,7 @@ ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE session_orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE active_logins ENABLE ROW LEVEL SECURITY;
 
 -- Allow public access for anon key
 CREATE POLICY "Allow public all access on rooms_computers" ON rooms_computers FOR ALL USING (true) WITH CHECK (true);
@@ -85,6 +97,7 @@ CREATE POLICY "Allow public all access on products" ON products FOR ALL USING (t
 CREATE POLICY "Allow public all access on sessions" ON sessions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public all access on session_orders" ON session_orders FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public all access on users" ON users FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public all access on active_logins" ON active_logins FOR ALL USING (true) WITH CHECK (true);
 
 -- Enable Realtime for live updates
 BEGIN;

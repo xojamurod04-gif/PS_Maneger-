@@ -34,10 +34,12 @@ export const LoginPage = () => {
       <div className="login-card">
         <div className="login-header">
           <div className="login-logo-icon">
-            <Gamepad2 size={36} className="neon-icon" />
+            <Gamepad2 size={38} className="neon-icon" />
           </div>
-          <h2>PS MANAGER <span className="logo-tag">PRO</span></h2>
-          <p className="login-subtitle">Tizimga kirish uchun login va parolingizni kiriting</p>
+          <h2 className="login-title">
+            <span className="logo-ps">PS</span> MANAGER
+          </h2>
+          <p className="login-subtitle">Gaming Club & PC Lounge Boshqaruv Tizimi</p>
         </div>
 
         {error && (

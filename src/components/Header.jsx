@@ -34,7 +34,9 @@ export const Header = () => {
             <Gamepad2 size={28} className="neon-icon" />
           </div>
           <div>
-            <h1 className="logo-title">PS MANAGER <span className="logo-tag">PRO</span></h1>
+            <h1 className="logo-title">
+              <span className="logo-ps">PS</span> MANAGER
+            </h1>
             <p className="logo-subtitle">Gaming Club & PC Lounge Boshqaruv Tizimi</p>
           </div>
         </div>

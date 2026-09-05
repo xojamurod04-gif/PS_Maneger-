@@ -60,12 +60,23 @@ CREATE TABLE IF NOT EXISTS session_orders (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- 6. System Users Table (Admin & Barmen Accounts)
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username VARCHAR(100) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    full_name VARCHAR(150) NOT NULL,
+    role VARCHAR(50) NOT NULL DEFAULT 'barmen', -- 'admin', 'barmen'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- Row Level Security (RLS) Enable
 ALTER TABLE rooms_computers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE session_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 
 -- Allow public access for anon key
 CREATE POLICY "Allow public all access on rooms_computers" ON rooms_computers FOR ALL USING (true) WITH CHECK (true);
@@ -73,6 +84,7 @@ CREATE POLICY "Allow public all access on categories" ON categories FOR ALL USIN
 CREATE POLICY "Allow public all access on products" ON products FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public all access on sessions" ON sessions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public all access on session_orders" ON session_orders FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public all access on users" ON users FOR ALL USING (true) WITH CHECK (true);
 
 -- Enable Realtime for live updates
 BEGIN;
@@ -109,4 +121,10 @@ INSERT INTO products (name, category_name, price, stock, min_stock_alert) VALUES
 ('Hot-Dog VIP', 'Yeguliklar', 22000, 20, 5),
 ('Gamburger Special', 'Yeguliklar', 28000, 18, 5),
 ('Klubny Sendvich', 'Yeguliklar', 32000, 12, 4)
+ON CONFLICT DO NOTHING;
+
+-- Seed Data: System Users
+INSERT INTO users (username, password, full_name, role) VALUES
+('admin', 'admin123', 'Bosh Administrator', 'admin'),
+('barmen1', 'barmen123', 'Barmen (Operator 1)', 'barmen')
 ON CONFLICT DO NOTHING;

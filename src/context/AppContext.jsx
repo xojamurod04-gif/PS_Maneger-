@@ -4,6 +4,11 @@ import { calculateTimeCost, getElapsedSeconds } from '../utils/formatters';
 
 const AppContext = createContext();
 
+const INITIAL_USERS = [
+  { id: 'u1', username: 'admin', password: 'admin123', full_name: 'Bosh Administrator', role: 'admin' },
+  { id: 'u2', username: 'barmen1', password: 'barmen123', full_name: 'Barmen (Operator 1)', role: 'barmen' },
+];
+
 const INITIAL_DEVICES = [
   { id: '1', name: 'PS5 #01', type: 'ps5', hourly_rate: 25000, status: 'available', current_session_id: null },
   { id: '2', name: 'PS5 #02', type: 'ps5', hourly_rate: 25000, status: 'available', current_session_id: null },
@@ -32,26 +37,54 @@ const INITIAL_PRODUCTS = [
 ];
 
 export const AppProvider = ({ children }) => {
-  const [currentView, setCurrentView] = useState('barmen'); // 'barmen' | 'admin'
+  const [currentUser, setCurrentUser] = useState(() => {
+    const local = localStorage.getItem('ps_current_user');
+    return local ? JSON.parse(local) : null;
+  });
+
+  const [usersList, setUsersList] = useState(() => {
+    const local = localStorage.getItem('ps_users');
+    return local ? JSON.parse(local) : INITIAL_USERS;
+  });
+
+  const [currentView, setCurrentView] = useState(() => {
+    if (currentUser?.role === 'admin') return 'admin';
+    return 'barmen';
+  });
+
   const [devices, setDevices] = useState(() => {
     const local = localStorage.getItem('ps_devices');
     return local ? JSON.parse(local) : INITIAL_DEVICES;
   });
+
   const [products, setProducts] = useState(() => {
     const local = localStorage.getItem('ps_products');
     return local ? JSON.parse(local) : INITIAL_PRODUCTS;
   });
+
   const [activeSessions, setActiveSessions] = useState(() => {
     const local = localStorage.getItem('ps_active_sessions');
     return local ? JSON.parse(local) : {};
   });
+
   const [completedSessions, setCompletedSessions] = useState(() => {
     const local = localStorage.getItem('ps_completed_sessions');
     return local ? JSON.parse(local) : [];
   });
-  const [isConnectedToSupabase, setIsConnectedToSupabase] = useState(false);
 
-  // Sync to localStorage
+  // Sync state to localStorage
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('ps_current_user', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('ps_current_user');
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    localStorage.setItem('ps_users', JSON.stringify(usersList));
+  }, [usersList]);
+
   useEffect(() => {
     localStorage.setItem('ps_devices', JSON.stringify(devices));
   }, [devices]);
@@ -72,34 +105,115 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     const fetchSupabaseData = async () => {
       try {
-        const { data: dbDevices, error: devError } = await supabase.from('rooms_computers').select('*');
-        if (!devError && dbDevices && dbDevices.length > 0) {
-          setDevices(dbDevices);
-          setIsConnectedToSupabase(true);
-        }
+        const { data: dbUsers } = await supabase.from('users').select('*');
+        if (dbUsers && dbUsers.length > 0) setUsersList(dbUsers);
 
-        const { data: dbProducts, error: prodError } = await supabase.from('products').select('*');
-        if (!prodError && dbProducts && dbProducts.length > 0) {
-          setProducts(dbProducts);
-        }
+        const { data: dbDevices } = await supabase.from('rooms_computers').select('*');
+        if (dbDevices && dbDevices.length > 0) setDevices(dbDevices);
 
-        const { data: dbSessions, error: sessError } = await supabase
+        const { data: dbProducts } = await supabase.from('products').select('*');
+        if (dbProducts && dbProducts.length > 0) setProducts(dbProducts);
+
+        const { data: dbSessions } = await supabase
           .from('sessions')
           .select('*')
           .eq('status', 'completed')
           .order('created_at', { ascending: false });
-        if (!sessError && dbSessions) {
-          setCompletedSessions(dbSessions);
-        }
+        if (dbSessions) setCompletedSessions(dbSessions);
       } catch (err) {
-        console.warn('Supabase fetch failed, operating in offline/localStorage mode:', err);
+        console.warn('Supabase fetch fallback:', err);
       }
     };
 
     fetchSupabaseData();
   }, []);
 
-  // 1. Start Session
+  // Login handler
+  const login = (username, password) => {
+    const user = usersList.find(
+      (u) => u.username.toLowerCase() === username.trim().toLowerCase() && u.password === password
+    );
+
+    if (!user) {
+      return { success: false, error: "Login yoki parol noto'g'ri!" };
+    }
+
+    setCurrentUser(user);
+    setCurrentView(user.role === 'admin' ? 'admin' : 'barmen');
+    return { success: true, user };
+  };
+
+  // Logout handler
+  const logout = () => {
+    setCurrentUser(null);
+  };
+
+  // Barmen Account Management (Admin)
+  const addBarmen = async (username, password, fullName) => {
+    const existing = usersList.find((u) => u.username.toLowerCase() === username.toLowerCase());
+    if (existing) {
+      alert(`Xatolik: "${username}" nomli foydalanuvchi allaqachon mavjud!`);
+      return false;
+    }
+
+    const newUser = {
+      id: 'usr_' + Date.now(),
+      username: username.trim(),
+      password: password,
+      full_name: fullName.trim(),
+      role: 'barmen',
+    };
+
+    setUsersList((prev) => [...prev, newUser]);
+
+    try {
+      await supabase.from('users').insert([newUser]);
+    } catch (e) {
+      console.warn('Supabase insert user error:', e);
+    }
+
+    return true;
+  };
+
+  const updateBarmen = async (userId, newUsername, newPassword, newFullName) => {
+    setUsersList((prev) =>
+      prev.map((u) =>
+        u.id === userId
+          ? {
+              ...u,
+              username: newUsername.trim(),
+              password: newPassword,
+              full_name: newFullName ? newFullName.trim() : u.full_name,
+            }
+          : u
+      )
+    );
+
+    try {
+      await supabase
+        .from('users')
+        .update({
+          username: newUsername.trim(),
+          password: newPassword,
+          full_name: newFullName ? newFullName.trim() : undefined,
+        })
+        .eq('id', userId);
+    } catch (e) {
+      console.warn('Supabase update user error:', e);
+    }
+  };
+
+  const deleteBarmen = async (userId) => {
+    setUsersList((prev) => prev.filter((u) => u.id !== userId));
+
+    try {
+      await supabase.from('users').delete().eq('id', userId);
+    } catch (e) {
+      console.warn('Supabase delete user error:', e);
+    }
+  };
+
+  // Start Session
   const startSession = async (deviceId, durationMinutes = null) => {
     const device = devices.find((d) => d.id === deviceId);
     if (!device) return;
@@ -116,15 +230,14 @@ export const AppProvider = ({ children }) => {
       hourly_rate: device.hourly_rate,
       orders: [],
       status: 'active',
+      started_by: currentUser ? currentUser.full_name : 'Barmen',
     };
 
-    // Update state
     setActiveSessions((prev) => ({ ...prev, [deviceId]: newSession }));
     setDevices((prev) =>
       prev.map((d) => (d.id === deviceId ? { ...d, status: 'occupied', current_session_id: newSessionId } : d))
     );
 
-    // Supabase push (background)
     try {
       await supabase.from('rooms_computers').update({ status: 'occupied' }).eq('id', deviceId);
       await supabase.from('sessions').insert({
@@ -140,24 +253,21 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // 2. Add product to active session
+  // Add Product to Session
   const addProductToSession = async (deviceId, product, quantity = 1) => {
     const session = activeSessions[deviceId];
     if (!session) return;
 
-    // Check stock
     const currentProd = products.find((p) => p.id === product.id);
     if (!currentProd || currentProd.stock < quantity) {
       alert(`Xatolik: "${product.name}" omborda yetarli emas! Qolgan soni: ${currentProd ? currentProd.stock : 0}`);
       return;
     }
 
-    // Reduce product stock
     setProducts((prev) =>
       prev.map((p) => (p.id === product.id ? { ...p, stock: p.stock - quantity } : p))
     );
 
-    // Add or increment in session orders
     setActiveSessions((prev) => {
       const currentSess = prev[deviceId];
       if (!currentSess) return prev;
@@ -193,7 +303,6 @@ export const AppProvider = ({ children }) => {
       };
     });
 
-    // Supabase update
     try {
       await supabase
         .from('products')
@@ -204,7 +313,7 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // 3. Remove/Decrease product from active session (Return to stock)
+  // Remove Product from Session
   const removeProductFromSession = async (deviceId, orderId, decreaseQty = 1) => {
     const session = activeSessions[deviceId];
     if (!session) return;
@@ -212,22 +321,18 @@ export const AppProvider = ({ children }) => {
     const orderItem = session.orders.find((o) => o.id === orderId);
     if (!orderItem) return;
 
-    // Restore stock
     setProducts((prev) =>
       prev.map((p) => (p.id === orderItem.product_id ? { ...p, stock: p.stock + decreaseQty } : p))
     );
 
-    // Update order in session
     setActiveSessions((prev) => {
       const currentSess = prev[deviceId];
       if (!currentSess) return prev;
 
       let updatedOrders = [];
       if (orderItem.quantity <= decreaseQty) {
-        // Remove completely
         updatedOrders = currentSess.orders.filter((o) => o.id !== orderId);
       } else {
-        // Decrease quantity
         updatedOrders = currentSess.orders.map((o) =>
           o.id === orderId
             ? {
@@ -248,7 +353,6 @@ export const AppProvider = ({ children }) => {
       };
     });
 
-    // Supabase update
     try {
       const currentProd = products.find((p) => p.id === orderItem.product_id);
       if (currentProd) {
@@ -262,7 +366,7 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // 4. End Session & Checkout
+  // End Session
   const endSession = async (deviceId, paymentMethod = 'cash') => {
     const session = activeSessions[deviceId];
     const device = devices.find((d) => d.id === deviceId);
@@ -283,7 +387,6 @@ export const AppProvider = ({ children }) => {
       status: 'completed',
     };
 
-    // Update state
     setCompletedSessions((prev) => [completedRecord, ...prev]);
     setActiveSessions((prev) => {
       const copy = { ...prev };
@@ -294,7 +397,6 @@ export const AppProvider = ({ children }) => {
       prev.map((d) => (d.id === deviceId ? { ...d, status: 'available', current_session_id: null } : d))
     );
 
-    // Supabase push
     try {
       await supabase.from('rooms_computers').update({ status: 'available' }).eq('id', deviceId);
       await supabase.from('sessions').update({
@@ -312,7 +414,15 @@ export const AppProvider = ({ children }) => {
     return completedRecord;
   };
 
-  // 5. Admin: Add Product
+  // Admin Remote Force End Session (Terminate / Disconnect active computer)
+  const adminForceEndSession = async (deviceId) => {
+    if (!window.confirm("Haqiqatan ham ushbu kompyuterdagi seansni masofadan to'xtatmoqchimisiz?")) {
+      return;
+    }
+    await endSession(deviceId, 'cash');
+  };
+
+  // Product & Device management
   const addProduct = async (newProd) => {
     const created = {
       id: 'p_' + Date.now(),
@@ -323,7 +433,6 @@ export const AppProvider = ({ children }) => {
     };
 
     setProducts((prev) => [created, ...prev]);
-
     try {
       await supabase.from('products').insert([created]);
     } catch (e) {
@@ -331,7 +440,6 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // 6. Admin: Restock Product
   const restockProduct = async (productId, quantityToAdd) => {
     const qty = Number(quantityToAdd);
     if (isNaN(qty) || qty <= 0) return;
@@ -354,7 +462,6 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // 7. Admin: Update Device Hourly Rate / Details
   const updateDeviceRate = async (deviceId, newHourlyRate) => {
     const rate = Number(newHourlyRate);
     setDevices((prev) =>
@@ -368,7 +475,6 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // 8. Admin: Add Device
   const addDevice = async (newDevice) => {
     const created = {
       id: 'dev_' + Date.now(),
@@ -378,7 +484,6 @@ export const AppProvider = ({ children }) => {
     };
 
     setDevices((prev) => [...prev, created]);
-
     try {
       await supabase.from('rooms_computers').insert([created]);
     } catch (e) {
@@ -389,17 +494,24 @@ export const AppProvider = ({ children }) => {
   return (
     <AppContext.Provider
       value={{
+        currentUser,
+        usersList,
+        login,
+        logout,
+        addBarmen,
+        updateBarmen,
+        deleteBarmen,
         currentView,
         setCurrentView,
         devices,
         products,
         activeSessions,
         completedSessions,
-        isConnectedToSupabase,
         startSession,
         addProductToSession,
         removeProductFromSession,
         endSession,
+        adminForceEndSession,
         addProduct,
         restockProduct,
         updateDeviceRate,

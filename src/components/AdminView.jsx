@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { formatUZS, formatDateTime } from '../utils/formatters';
+import { formatUZS, formatDateTime, formatDuration, getElapsedSeconds, calculateTimeCost } from '../utils/formatters';
 import {
   TrendingUp,
   Package,
@@ -8,33 +8,62 @@ import {
   History,
   Plus,
   Edit2,
+  Trash2,
   AlertTriangle,
   Banknote,
   CreditCard,
   Smartphone,
   Search,
-  CheckCircle,
   RefreshCw,
+  Users,
+  KeyRound,
+  PowerOff,
+  Clock,
+  ShieldCheck,
+  UserPlus,
 } from 'lucide-react';
 
 export const AdminView = () => {
   const {
+    usersList,
+    addBarmen,
+    updateBarmen,
+    deleteBarmen,
     products,
     devices,
+    activeSessions,
     completedSessions,
+    adminForceEndSession,
     addProduct,
     restockProduct,
     updateDeviceRate,
     addDevice,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState('reports'); // 'reports' | 'inventory' | 'devices' | 'history'
+  const [activeTab, setActiveTab] = useState('live_devices'); // 'live_devices' | 'users' | 'reports' | 'inventory' | 'devices' | 'history'
 
   // Modals state
+  const [showAddBarmenModal, setShowAddBarmenModal] = useState(false);
+  const [editUserModal, setEditUserModal] = useState(null); // user object
+
   const [showAddProdModal, setShowAddProdModal] = useState(false);
   const [showRestockModal, setShowRestockModal] = useState(null); // productId
   const [restockQty, setRestockQty] = useState('');
   const [showAddDeviceModal, setShowAddDeviceModal] = useState(false);
+
+  // Add Barmen Form state
+  const [newBarmen, setNewBarmen] = useState({
+    username: '',
+    password: '',
+    full_name: '',
+  });
+
+  // Edit Barmen Form state
+  const [editBarmenData, setEditBarmenData] = useState({
+    username: '',
+    password: '',
+    full_name: '',
+  });
 
   // Add Product Form state
   const [newProd, setNewProd] = useState({
@@ -78,6 +107,24 @@ export const AdminView = () => {
 
   const lowStockProducts = products.filter((p) => p.stock <= p.min_stock_alert);
 
+  // Handlers
+  const handleAddBarmenSubmit = async (e) => {
+    e.preventDefault();
+    if (!newBarmen.username || !newBarmen.password || !newBarmen.full_name) return;
+    const ok = await addBarmen(newBarmen.username, newBarmen.password, newBarmen.full_name);
+    if (ok) {
+      setShowAddBarmenModal(false);
+      setNewBarmen({ username: '', password: '', full_name: '' });
+    }
+  };
+
+  const handleEditBarmenSubmit = async (e) => {
+    e.preventDefault();
+    if (!editUserModal || !editBarmenData.username || !editBarmenData.password) return;
+    await updateBarmen(editUserModal.id, editBarmenData.username, editBarmenData.password, editBarmenData.full_name);
+    setEditUserModal(null);
+  };
+
   const handleAddProductSubmit = (e) => {
     e.preventDefault();
     if (!newProd.name || !newProd.price || !newProd.stock) return;
@@ -107,10 +154,24 @@ export const AdminView = () => {
       {/* Navigation tabs */}
       <div className="admin-nav-tabs">
         <button
+          className={`admin-tab ${activeTab === 'live_devices' ? 'active' : ''}`}
+          onClick={() => setActiveTab('live_devices')}
+        >
+          <Monitor size={18} /> Ulangan Kompyuterlar (Live) ({Object.keys(activeSessions).length})
+        </button>
+
+        <button
+          className={`admin-tab ${activeTab === 'users' ? 'active' : ''}`}
+          onClick={() => setActiveTab('users')}
+        >
+          <Users size={18} /> Barmen Akkauntlari ({usersList.filter((u) => u.role === 'barmen').length})
+        </button>
+
+        <button
           className={`admin-tab ${activeTab === 'reports' ? 'active' : ''}`}
           onClick={() => setActiveTab('reports')}
         >
-          <TrendingUp size={18} /> Moliyaviy Hisobotlar & Foyda
+          <TrendingUp size={18} /> Hisobotlar & Foyda
         </button>
 
         <button
@@ -127,7 +188,7 @@ export const AdminView = () => {
           className={`admin-tab ${activeTab === 'devices' ? 'active' : ''}`}
           onClick={() => setActiveTab('devices')}
         >
-          <Monitor size={18} /> Xona va Kompyuterlar ({devices.length})
+          <Monitor size={18} /> Tariflar va Xonalar ({devices.length})
         </button>
 
         <button
@@ -138,10 +199,164 @@ export const AdminView = () => {
         </button>
       </div>
 
-      {/* 1. FINANCIAL REPORTS & ANALYTICS TAB */}
+      {/* 1. LIVE CONNECTED COMPUTERS & REMOTE CONTROL TAB */}
+      {activeTab === 'live_devices' && (
+        <div className="admin-content-section">
+          <div className="section-toolbar">
+            <div>
+              <h3>Ulangan Kompyuterlar Jonli Nazorati</h3>
+              <p className="sub-text">Barmen panelidagi barcha faol kompyuterlar va ularning jonli hisoblari</p>
+            </div>
+          </div>
+
+          <div className="live-devices-grid">
+            {devices.map((device) => {
+              const session = activeSessions[device.id];
+              const isOccupied = device.status === 'occupied' && !!session;
+
+              let elapsedSecs = 0;
+              let timeCost = 0;
+              let productsCost = 0;
+              let totalCost = 0;
+
+              if (isOccupied) {
+                elapsedSecs = getElapsedSeconds(session.start_time);
+                timeCost = calculateTimeCost(session.start_time, device.hourly_rate);
+                productsCost = session.orders.reduce((acc, curr) => acc + curr.total_price, 0);
+                totalCost = timeCost + productsCost;
+              }
+
+              return (
+                <div key={device.id} className={`live-dev-card ${isOccupied ? 'active' : 'idle'}`}>
+                  <div className="live-card-head">
+                    <div className="live-dev-name">
+                      <h4>{device.name}</h4>
+                      <span className="live-dev-rate">{formatUZS(device.hourly_rate)}/soat</span>
+                    </div>
+                    <span className={`status-pill-small ${isOccupied ? 'occupied' : 'available'}`}>
+                      {isOccupied ? 'ULANGAN (BAND)' : 'BO\'SH'}
+                    </span>
+                  </div>
+
+                  {isOccupied ? (
+                    <div className="live-card-body">
+                      <div className="live-timer-row">
+                        <Clock size={16} className="pulse-icon" />
+                        <span className="timer-text">{formatDuration(elapsedSecs)}</span>
+                      </div>
+
+                      <div className="live-cost-info">
+                        <div>Vaqt summasi: <strong>{formatUZS(timeCost)}</strong></div>
+                        <div>Mahsulotlar: <strong>{formatUZS(productsCost)}</strong></div>
+                        <div className="live-total-row">Jami: <strong>{formatUZS(totalCost)}</strong></div>
+                      </div>
+
+                      {session.orders.length > 0 && (
+                        <div className="live-orders-summary">
+                          <span>Buyurtmalar:</span>
+                          {session.orders.map((o, idx) => (
+                            <span key={idx} className="order-pill-tag">
+                              {o.product_name} x{o.quantity}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <button
+                        className="btn-remote-disconnect"
+                        onClick={() => adminForceEndSession(device.id)}
+                      >
+                        <PowerOff size={16} /> Masofadan Seansni O'chirish
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="live-card-empty">
+                      <p>Hozirda seans ketmayapti.</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 2. BARMEN USERS MANAGEMENT TAB */}
+      {activeTab === 'users' && (
+        <div className="admin-content-section">
+          <div className="section-toolbar">
+            <div>
+              <h3>Barmen Akkauntlari va Tizim Foydalanuvchilari</h3>
+              <p className="sub-text">Barmenlar uchun login va parollarni yaratish, tahrirlash hamda o'chirish</p>
+            </div>
+            <button className="btn-add-primary" onClick={() => setShowAddBarmenModal(true)}>
+              <UserPlus size={18} /> Yangi Barmen Qo'shish
+            </button>
+          </div>
+
+          <div className="table-responsive">
+            <table className="custom-table">
+              <thead>
+                <tr>
+                  <th>F.I.SH (Ismi)</th>
+                  <th>Login</th>
+                  <th>Parol</th>
+                  <th>Roli</th>
+                  <th>Amallar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {usersList.map((user) => (
+                  <tr key={user.id}>
+                    <td className="font-semibold">{user.full_name}</td>
+                    <td><span className="user-name-tag">{user.username}</span></td>
+                    <td><code>{user.password}</code></td>
+                    <td>
+                      <span className={`role-badge ${user.role}`}>
+                        {user.role === 'admin' ? '👑 Admin' : '🍹 Barmen'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="action-buttons-group">
+                        <button
+                          className="btn-edit-user"
+                          onClick={() => {
+                            setEditUserModal(user);
+                            setEditBarmenData({
+                              username: user.username,
+                              password: user.password,
+                              full_name: user.full_name,
+                            });
+                          }}
+                        >
+                          <Edit2 size={14} /> Tahrirlash
+                        </button>
+
+                        {user.role !== 'admin' && (
+                          <button
+                            className="btn-delete-user"
+                            onClick={() => {
+                              if (window.confirm(`"${user.full_name}" barmen akkauntini o'chirmoqchimisiz?`)) {
+                                deleteBarmen(user.id);
+                              }
+                            }}
+                          >
+                            <Trash2 size={14} /> O'chirish
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* 3. FINANCIAL REPORTS & ANALYTICS TAB */}
       {activeTab === 'reports' && (
         <div className="admin-content-section">
-          {/* Top KPI Cards */}
           <div className="kpi-grid">
             <div className="kpi-card total-kpi">
               <div className="kpi-header">
@@ -171,7 +386,6 @@ export const AdminView = () => {
             </div>
           </div>
 
-          {/* Payment breakdown */}
           <div className="payment-breakdown-section">
             <h3>To'lov Turlari Bo'yicha Tahlil</h3>
             <div className="payment-cards-grid">
@@ -194,7 +408,7 @@ export const AdminView = () => {
         </div>
       )}
 
-      {/* 2. INVENTORY & STOCK MANAGEMENT TAB */}
+      {/* 4. INVENTORY & STOCK MANAGEMENT TAB */}
       {activeTab === 'inventory' && (
         <div className="admin-content-section">
           <div className="section-toolbar">
@@ -277,7 +491,7 @@ export const AdminView = () => {
         </div>
       )}
 
-      {/* 3. ROOMS & COMPUTERS SETTINGS TAB */}
+      {/* 5. ROOMS & COMPUTERS SETTINGS TAB */}
       {activeTab === 'devices' && (
         <div className="admin-content-section">
           <div className="section-toolbar">
@@ -314,7 +528,7 @@ export const AdminView = () => {
         </div>
       )}
 
-      {/* 4. COMPLETED SESSIONS HISTORY TAB */}
+      {/* 6. COMPLETED SESSIONS HISTORY TAB */}
       {activeTab === 'history' && (
         <div className="admin-content-section">
           <h3>Yakunlangan Seanslar Tarixi va Checklar</h3>
@@ -369,6 +583,113 @@ export const AdminView = () => {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ADD BARMEN MODAL */}
+      {showAddBarmenModal && (
+        <div className="modal-backdrop">
+          <div className="modal-content small-modal">
+            <div className="modal-header">
+              <h3>Yangi Barmen Akkaunti Qo'shish</h3>
+              <button className="modal-close-btn" onClick={() => setShowAddBarmenModal(false)}>×</button>
+            </div>
+            <form onSubmit={handleAddBarmenSubmit} className="modal-form">
+              <div className="form-group">
+                <label>F.I.SH (Barmen Ismi):</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Masalan: Sardor Rahimov"
+                  value={newBarmen.full_name}
+                  onChange={(e) => setNewBarmen({ ...newBarmen, full_name: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Login:</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Masalan: barmen2"
+                  value={newBarmen.username}
+                  onChange={(e) => setNewBarmen({ ...newBarmen, username: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Parol:</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  value={newBarmen.password}
+                  onChange={(e) => setNewBarmen({ ...newBarmen, password: e.target.value })}
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" className="btn-cancel" onClick={() => setShowAddBarmenModal(false)}>
+                  Bekor Qilish
+                </button>
+                <button type="submit" className="btn-add-primary">
+                  Saqlash
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT BARMEN MODAL */}
+      {editUserModal && (
+        <div className="modal-backdrop">
+          <div className="modal-content small-modal">
+            <div className="modal-header">
+              <h3>Akkauntni Tahrirlash: {editUserModal.full_name}</h3>
+              <button className="modal-close-btn" onClick={() => setEditUserModal(null)}>×</button>
+            </div>
+            <form onSubmit={handleEditBarmenSubmit} className="modal-form">
+              <div className="form-group">
+                <label>F.I.SH:</label>
+                <input
+                  type="text"
+                  required
+                  value={editBarmenData.full_name}
+                  onChange={(e) => setEditBarmenData({ ...editBarmenData, full_name: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Yangi Login:</label>
+                <input
+                  type="text"
+                  required
+                  value={editBarmenData.username}
+                  onChange={(e) => setEditBarmenData({ ...editBarmenData, username: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Yangi Parol:</label>
+                <input
+                  type="text"
+                  required
+                  value={editBarmenData.password}
+                  onChange={(e) => setEditBarmenData({ ...editBarmenData, password: e.target.value })}
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" className="btn-cancel" onClick={() => setEditUserModal(null)}>
+                  Bekor Qilish
+                </button>
+                <button type="submit" className="btn-add-primary">
+                  O'zgarishlarni Saqlash
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

@@ -1,9 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Gamepad2, LayoutDashboard, MonitorPlay, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Gamepad2, LayoutDashboard, MonitorPlay, AlertTriangle, UserCheck, LogOut } from 'lucide-react';
 
 export const Header = () => {
-  const { currentView, setCurrentView, devices, activeSessions, products, isConnectedToSupabase } = useApp();
+  const {
+    currentUser,
+    logout,
+    currentView,
+    setCurrentView,
+    devices,
+    activeSessions,
+    products,
+  } = useApp();
+
   const [timeStr, setTimeStr] = useState('');
 
   useEffect(() => {
@@ -42,7 +51,7 @@ export const Header = () => {
         {lowStockCount > 0 && (
           <div className="status-pill warning-pill" title="Omborda kam qolgan mahsulotlar bor!">
             <AlertTriangle size={16} />
-            <span>Ombor ogohlantirish: <strong>{lowStockCount} ta</strong></span>
+            <span>Ombor: <strong>{lowStockCount} ta</strong></span>
           </div>
         )}
 
@@ -53,6 +62,16 @@ export const Header = () => {
       </div>
 
       <div className="header-right">
+        {/* User Info Pill */}
+        <div className="user-info-pill">
+          <UserCheck size={16} className="user-icon" />
+          <div className="user-details">
+            <span className="user-name">{currentUser?.full_name || currentUser?.username}</span>
+            <span className="user-role-badge">{currentUser?.role === 'admin' ? '👑 Admin' : '🍹 Barmen'}</span>
+          </div>
+        </div>
+
+        {/* View Toggle (Only if Admin, or allow viewing) */}
         <div className="view-toggle">
           <button
             className={`toggle-btn ${currentView === 'barmen' ? 'active' : ''}`}
@@ -62,14 +81,22 @@ export const Header = () => {
             <span>Barmen Panel</span>
           </button>
 
-          <button
-            className={`toggle-btn ${currentView === 'admin' ? 'active' : ''}`}
-            onClick={() => setCurrentView('admin')}
-          >
-            <LayoutDashboard size={18} />
-            <span>Admin Panel</span>
-          </button>
+          {currentUser?.role === 'admin' && (
+            <button
+              className={`toggle-btn ${currentView === 'admin' ? 'active' : ''}`}
+              onClick={() => setCurrentView('admin')}
+            >
+              <LayoutDashboard size={18} />
+              <span>Admin Panel</span>
+            </button>
+          )}
         </div>
+
+        {/* Logout Button */}
+        <button className="btn-logout" onClick={logout} title="Tizimdan chiqish">
+          <LogOut size={18} />
+          <span>Chiqish</span>
+        </button>
       </div>
     </header>
   );

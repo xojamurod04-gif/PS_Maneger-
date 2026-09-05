@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { formatUZS, formatDateTime, formatDuration, getElapsedSeconds, calculateTimeCost } from '../utils/formatters';
+import { formatUZS, formatDateTime } from '../utils/formatters';
 import {
   TrendingUp,
   Package,
@@ -16,8 +16,6 @@ import {
   Search,
   RefreshCw,
   Users,
-  PowerOff,
-  Clock,
   ShieldCheck,
   UserPlus,
   UserX,
@@ -34,16 +32,14 @@ export const AdminView = () => {
     deleteBarmen,
     products,
     devices,
-    activeSessions,
     completedSessions,
-    adminForceEndSession,
     addProduct,
     restockProduct,
     updateDeviceRate,
     addDevice,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState('security'); // 'security' | 'live_devices' | 'users' | 'reports' | 'inventory' | 'devices' | 'history'
+  const [activeTab, setActiveTab] = useState('security'); // 'security' | 'users' | 'reports' | 'inventory' | 'devices' | 'history'
 
   // Modals state
   const [showAddBarmenModal, setShowAddBarmenModal] = useState(false);
@@ -166,13 +162,6 @@ export const AdminView = () => {
         </button>
 
         <button
-          className={`admin-tab ${activeTab === 'live_devices' ? 'active' : ''}`}
-          onClick={() => setActiveTab('live_devices')}
-        >
-          <Monitor size={18} /> Ulangan Kompyuterlar (Live) ({Object.keys(activeSessions).length})
-        </button>
-
-        <button
           className={`admin-tab ${activeTab === 'users' ? 'active' : ''}`}
           onClick={() => setActiveTab('users')}
         >
@@ -287,89 +276,7 @@ export const AdminView = () => {
         </div>
       )}
 
-      {/* 2. LIVE CONNECTED COMPUTERS & REMOTE CONTROL TAB */}
-      {activeTab === 'live_devices' && (
-        <div className="admin-content-section">
-          <div className="section-toolbar">
-            <div>
-              <h3>Ulangan Kompyuterlar Jonli Nazorati</h3>
-              <p className="sub-text">Barmen panelidagi barcha faol kompyuterlar va ularning jonli hisoblari</p>
-            </div>
-          </div>
-
-          <div className="live-devices-grid">
-            {devices.map((device) => {
-              const session = activeSessions[device.id];
-              const isOccupied = device.status === 'occupied' && !!session;
-
-              let elapsedSecs = 0;
-              let timeCost = 0;
-              let productsCost = 0;
-              let totalCost = 0;
-
-              if (isOccupied) {
-                elapsedSecs = getElapsedSeconds(session.start_time);
-                timeCost = calculateTimeCost(session.start_time, device.hourly_rate);
-                productsCost = session.orders.reduce((acc, curr) => acc + curr.total_price, 0);
-                totalCost = timeCost + productsCost;
-              }
-
-              return (
-                <div key={device.id} className={`live-dev-card ${isOccupied ? 'active' : 'idle'}`}>
-                  <div className="live-card-head">
-                    <div className="live-dev-name">
-                      <h4>{device.name}</h4>
-                      <span className="live-dev-rate">{formatUZS(device.hourly_rate)}/soat</span>
-                    </div>
-                    <span className={`status-pill-small ${isOccupied ? 'occupied' : 'available'}`}>
-                      {isOccupied ? 'ULANGAN (BAND)' : 'BO\'SH'}
-                    </span>
-                  </div>
-
-                  {isOccupied ? (
-                    <div className="live-card-body">
-                      <div className="live-timer-row">
-                        <Clock size={16} className="pulse-icon" />
-                        <span className="timer-text">{formatDuration(elapsedSecs)}</span>
-                      </div>
-
-                      <div className="live-cost-info">
-                        <div>Vaqt summasi: <strong>{formatUZS(timeCost)}</strong></div>
-                        <div>Mahsulotlar: <strong>{formatUZS(productsCost)}</strong></div>
-                        <div className="live-total-row">Jami: <strong>{formatUZS(totalCost)}</strong></div>
-                      </div>
-
-                      {session.orders.length > 0 && (
-                        <div className="live-orders-summary">
-                          <span>Buyurtmalar:</span>
-                          {session.orders.map((o, idx) => (
-                            <span key={idx} className="order-pill-tag">
-                              {o.product_name} x{o.quantity}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      <button
-                        className="btn-remote-disconnect"
-                        onClick={() => adminForceEndSession(device.id)}
-                      >
-                        <PowerOff size={16} /> Masofadan Seansni O'chirish
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="live-card-empty">
-                      <p>Hozirda seans ketmayapti.</p>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 3. BARMEN USERS MANAGEMENT TAB */}
+      {/* 2. BARMEN USERS MANAGEMENT TAB */}
       {activeTab === 'users' && (
         <div className="admin-content-section">
           <div className="section-toolbar">
@@ -442,7 +349,7 @@ export const AdminView = () => {
         </div>
       )}
 
-      {/* 4. FINANCIAL REPORTS & ANALYTICS TAB */}
+      {/* 3. FINANCIAL REPORTS & ANALYTICS TAB */}
       {activeTab === 'reports' && (
         <div className="admin-content-section">
           <div className="kpi-grid">
@@ -496,7 +403,7 @@ export const AdminView = () => {
         </div>
       )}
 
-      {/* 5. INVENTORY & STOCK MANAGEMENT TAB */}
+      {/* 4. INVENTORY & STOCK MANAGEMENT TAB */}
       {activeTab === 'inventory' && (
         <div className="admin-content-section">
           <div className="section-toolbar">
@@ -579,7 +486,7 @@ export const AdminView = () => {
         </div>
       )}
 
-      {/* 6. ROOMS & COMPUTERS SETTINGS TAB */}
+      {/* 5. ROOMS & COMPUTERS SETTINGS TAB */}
       {activeTab === 'devices' && (
         <div className="admin-content-section">
           <div className="section-toolbar">
@@ -616,7 +523,7 @@ export const AdminView = () => {
         </div>
       )}
 
-      {/* 7. COMPLETED SESSIONS HISTORY TAB */}
+      {/* 6. COMPLETED SESSIONS HISTORY TAB */}
       {activeTab === 'history' && (
         <div className="admin-content-section">
           <h3>Yakunlangan Seanslar Tarixi va Checklar</h3>

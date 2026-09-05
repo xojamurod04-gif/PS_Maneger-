@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Gamepad2, LayoutDashboard, MonitorPlay, AlertTriangle, UserCheck, LogOut } from 'lucide-react';
+import { Gamepad2, MonitorPlay, AlertTriangle, UserCheck, LogOut } from 'lucide-react';
 
 export const Header = () => {
   const {
     currentUser,
     logout,
-    currentView,
-    setCurrentView,
     devices,
     activeSessions,
     products,
@@ -67,29 +65,10 @@ export const Header = () => {
           <UserCheck size={16} className="user-icon" />
           <div className="user-details">
             <span className="user-name">{currentUser?.full_name || currentUser?.username}</span>
-            <span className="user-role-badge">{currentUser?.role === 'admin' ? '👑 Admin' : '🍹 Barmen'}</span>
+            <span className="user-role-badge">
+              {currentUser?.role === 'admin' ? '👑 Admin Paneli' : '🍹 Barmen Paneli'}
+            </span>
           </div>
-        </div>
-
-        {/* View Toggle (Only if Admin, or allow viewing) */}
-        <div className="view-toggle">
-          <button
-            className={`toggle-btn ${currentView === 'barmen' ? 'active' : ''}`}
-            onClick={() => setCurrentView('barmen')}
-          >
-            <Gamepad2 size={18} />
-            <span>Barmen Panel</span>
-          </button>
-
-          {currentUser?.role === 'admin' && (
-            <button
-              className={`toggle-btn ${currentView === 'admin' ? 'active' : ''}`}
-              onClick={() => setCurrentView('admin')}
-            >
-              <LayoutDashboard size={18} />
-              <span>Admin Panel</span>
-            </button>
-          )}
         </div>
 
         {/* Logout Button */}

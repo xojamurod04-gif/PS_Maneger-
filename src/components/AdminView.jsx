@@ -34,18 +34,21 @@ export const AdminView = () => {
     devices,
     completedSessions,
     addProduct,
+    updateProduct,
+    deleteProduct,
     restockProduct,
     updateDeviceRate,
     addDevice,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState('security'); // 'security' | 'users' | 'reports' | 'inventory' | 'devices' | 'history'
+  const [activeTab, setActiveTab] = useState('inventory'); // 'inventory' | 'security' | 'users' | 'reports' | 'devices' | 'history'
 
   // Modals state
   const [showAddBarmenModal, setShowAddBarmenModal] = useState(false);
   const [editUserModal, setEditUserModal] = useState(null); // user object
 
   const [showAddProdModal, setShowAddProdModal] = useState(false);
+  const [editProdModal, setEditProdModal] = useState(null); // product object
   const [showRestockModal, setShowRestockModal] = useState(null); // productId
   const [restockQty, setRestockQty] = useState('');
   const [showAddDeviceModal, setShowAddDeviceModal] = useState(false);
@@ -66,6 +69,15 @@ export const AdminView = () => {
 
   // Add Product Form state
   const [newProd, setNewProd] = useState({
+    name: '',
+    category_name: 'Ichimliklar',
+    price: '',
+    stock: '',
+    min_stock_alert: 5,
+  });
+
+  // Edit Product Form state
+  const [editProdData, setEditProdData] = useState({
     name: '',
     category_name: 'Ichimliklar',
     price: '',
@@ -132,6 +144,13 @@ export const AdminView = () => {
     setNewProd({ name: '', category_name: 'Ichimliklar', price: '', stock: '', min_stock_alert: 5 });
   };
 
+  const handleEditProductSubmit = (e) => {
+    e.preventDefault();
+    if (!editProdModal || !editProdData.name || !editProdData.price) return;
+    updateProduct(editProdModal.id, editProdData);
+    setEditProdModal(null);
+  };
+
   const handleRestockSubmit = (e) => {
     e.preventDefault();
     if (!showRestockModal || !restockQty) return;
@@ -155,6 +174,16 @@ export const AdminView = () => {
       {/* Navigation tabs */}
       <div className="admin-nav-tabs">
         <button
+          className={`admin-tab ${activeTab === 'inventory' ? 'active' : ''}`}
+          onClick={() => setActiveTab('inventory')}
+        >
+          <Package size={18} /> Ombor Qoldig'i ({products.length})
+          {lowStockProducts.length > 0 && (
+            <span className="tab-badge-warning">{lowStockProducts.length}</span>
+          )}
+        </button>
+
+        <button
           className={`admin-tab ${activeTab === 'security' ? 'active' : ''}`}
           onClick={() => setActiveTab('security')}
         >
@@ -176,16 +205,6 @@ export const AdminView = () => {
         </button>
 
         <button
-          className={`admin-tab ${activeTab === 'inventory' ? 'active' : ''}`}
-          onClick={() => setActiveTab('inventory')}
-        >
-          <Package size={18} /> Ombor Qoldig'i ({products.length})
-          {lowStockProducts.length > 0 && (
-            <span className="tab-badge-warning">{lowStockProducts.length}</span>
-          )}
-        </button>
-
-        <button
           className={`admin-tab ${activeTab === 'devices' ? 'active' : ''}`}
           onClick={() => setActiveTab('devices')}
         >
@@ -200,7 +219,118 @@ export const AdminView = () => {
         </button>
       </div>
 
-      {/* 1. SECURITY & ACTIVE USER LOGINS MONITOR TAB */}
+      {/* 1. INVENTORY & STOCK MANAGEMENT TAB */}
+      {activeTab === 'inventory' && (
+        <div className="admin-content-section">
+          <div className="section-toolbar">
+            <div className="search-bar">
+              <Search size={18} className="search-icon" />
+              <input
+                type="text"
+                placeholder="Ombordan mahsulot qidirish..."
+                value={inventorySearch}
+                onChange={(e) => setInventorySearch(e.target.value)}
+              />
+            </div>
+
+            <button className="btn-add-primary" onClick={() => setShowAddProdModal(true)}>
+              <Plus size={18} /> Yangi Mahsulot Qo'shish
+            </button>
+          </div>
+
+          {lowStockProducts.length > 0 && (
+            <div className="alert-banner">
+              <AlertTriangle size={20} />
+              <div>
+                <strong>Ombor Ogohlantirishi:</strong> {lowStockProducts.length} ta mahsulot zaxirasi minimal darajadan oz qoldi ({lowStockProducts.map(p => p.name).join(', ')}).
+              </div>
+            </div>
+          )}
+
+          <div className="table-responsive">
+            <table className="custom-table">
+              <thead>
+                <tr>
+                  <th>Mahsulot Nomi</th>
+                  <th>Kategoriya</th>
+                  <th>Sotuv Narxi</th>
+                  <th>Ombordagi Qoldiq (Stock)</th>
+                  <th>Holat</th>
+                  <th>Amallar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProducts.map((p) => {
+                  const isLow = p.stock <= p.min_stock_alert;
+                  const isOut = p.stock <= 0;
+                  return (
+                    <tr key={p.id} className={isOut ? 'row-out' : isLow ? 'row-low' : ''}>
+                      <td className="font-semibold">{p.name}</td>
+                      <td><span className="cat-badge">{p.category_name}</span></td>
+                      <td className="font-semibold">{formatUZS(p.price)}</td>
+                      <td>
+                        <span className={`stock-counter ${isOut ? 'out' : isLow ? 'low' : 'good'}`}>
+                          {p.stock} ta
+                        </span>
+                      </td>
+                      <td>
+                        {isOut ? (
+                          <span className="status-tag tag-out">TUGAGAN</span>
+                        ) : isLow ? (
+                          <span className="status-tag tag-low">OZ QOLGAN</span>
+                        ) : (
+                          <span className="status-tag tag-good">YETARLI</span>
+                        )}
+                      </td>
+                      <td>
+                        <div className="action-buttons-group">
+                          <button
+                            className="btn-edit-user"
+                            onClick={() => {
+                              setEditProdModal(p);
+                              setEditProdData({
+                                name: p.name,
+                                category_name: p.category_name,
+                                price: p.price,
+                                stock: p.stock,
+                                min_stock_alert: p.min_stock_alert,
+                              });
+                            }}
+                            title="Narxi va ma'lumotlarini tahrirlash"
+                          >
+                            <Edit2 size={14} /> Tahrirlash
+                          </button>
+
+                          <button
+                            className="btn-action-restock"
+                            onClick={() => {
+                              setShowRestockModal(p.id);
+                              setRestockQty('');
+                            }}
+                            title="Omborni to'ldirish (+ Restock)"
+                          >
+                            <RefreshCw size={14} /> To'ldirish
+                          </button>
+
+                          <button
+                            className="btn-delete-user"
+                            onClick={() => deleteProduct(p.id)}
+                            title="Mahsulotni o'chirish"
+                          >
+                            <Trash2 size={14} /> O'chirish
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* 2. SECURITY & ACTIVE USER LOGINS MONITOR TAB */}
       {activeTab === 'security' && (
         <div className="admin-content-section">
           <div className="section-toolbar">
@@ -276,7 +406,7 @@ export const AdminView = () => {
         </div>
       )}
 
-      {/* 2. BARMEN USERS MANAGEMENT TAB */}
+      {/* 3. BARMEN USERS MANAGEMENT TAB */}
       {activeTab === 'users' && (
         <div className="admin-content-section">
           <div className="section-toolbar">
@@ -349,7 +479,7 @@ export const AdminView = () => {
         </div>
       )}
 
-      {/* 3. FINANCIAL REPORTS & ANALYTICS TAB */}
+      {/* 4. FINANCIAL REPORTS & ANALYTICS TAB */}
       {activeTab === 'reports' && (
         <div className="admin-content-section">
           <div className="kpi-grid">
@@ -399,89 +529,6 @@ export const AdminView = () => {
                 <div className="pay-amount">{formatUZS(clickRevenue)}</div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* 4. INVENTORY & STOCK MANAGEMENT TAB */}
-      {activeTab === 'inventory' && (
-        <div className="admin-content-section">
-          <div className="section-toolbar">
-            <div className="search-bar">
-              <Search size={18} className="search-icon" />
-              <input
-                type="text"
-                placeholder="Ombordan mahsulot qidirish..."
-                value={inventorySearch}
-                onChange={(e) => setInventorySearch(e.target.value)}
-              />
-            </div>
-
-            <button className="btn-add-primary" onClick={() => setShowAddProdModal(true)}>
-              <Plus size={18} /> Yangi Mahsulot Qo'shish
-            </button>
-          </div>
-
-          {lowStockProducts.length > 0 && (
-            <div className="alert-banner">
-              <AlertTriangle size={20} />
-              <div>
-                <strong>Ombor Ogohlantirishi:</strong> {lowStockProducts.length} ta mahsulot zaxirasi minimal darajadan oz qoldi ({lowStockProducts.map(p => p.name).join(', ')}).
-              </div>
-            </div>
-          )}
-
-          <div className="table-responsive">
-            <table className="custom-table">
-              <thead>
-                <tr>
-                  <th>Mahsulot Nomi</th>
-                  <th>Kategoriya</th>
-                  <th>Sotuv Narxi</th>
-                  <th>Ombordagi Qoldiq (Stock)</th>
-                  <th>Holat</th>
-                  <th>Amallar</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredProducts.map((p) => {
-                  const isLow = p.stock <= p.min_stock_alert;
-                  const isOut = p.stock <= 0;
-                  return (
-                    <tr key={p.id} className={isOut ? 'row-out' : isLow ? 'row-low' : ''}>
-                      <td className="font-semibold">{p.name}</td>
-                      <td><span className="cat-badge">{p.category_name}</span></td>
-                      <td className="font-semibold">{formatUZS(p.price)}</td>
-                      <td>
-                        <span className={`stock-counter ${isOut ? 'out' : isLow ? 'low' : 'good'}`}>
-                          {p.stock} ta
-                        </span>
-                      </td>
-                      <td>
-                        {isOut ? (
-                          <span className="status-tag tag-out">TUGAGAN</span>
-                        ) : isLow ? (
-                          <span className="status-tag tag-low">OZ QOLGAN</span>
-                        ) : (
-                          <span className="status-tag tag-good">YETARLI</span>
-                        )}
-                      </td>
-                      <td>
-                        <button
-                          className="btn-action-restock"
-                          onClick={() => {
-                            setShowRestockModal(p.id);
-                            setRestockQty('');
-                          }}
-                        >
-                          <RefreshCw size={14} /> Omborni To'ldirish (+ Restock)
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
           </div>
         </div>
       )}
@@ -578,6 +625,72 @@ export const AdminView = () => {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* EDIT PRODUCT MODAL */}
+      {editProdModal && (
+        <div className="modal-backdrop">
+          <div className="modal-content small-modal">
+            <div className="modal-header">
+              <h3>Mahsulotni Tahrirlash: {editProdModal.name}</h3>
+              <button className="modal-close-btn" onClick={() => setEditProdModal(null)}>×</button>
+            </div>
+            <form onSubmit={handleEditProductSubmit} className="modal-form">
+              <div className="form-group">
+                <label>Mahsulot Nomi:</label>
+                <input
+                  type="text"
+                  required
+                  value={editProdData.name}
+                  onChange={(e) => setEditProdData({ ...editProdData, name: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Kategoriya:</label>
+                <select
+                  value={editProdData.category_name}
+                  onChange={(e) => setEditProdData({ ...editProdData, category_name: e.target.value })}
+                >
+                  <option value="Ichimliklar">Ichimliklar</option>
+                  <option value="Sneklar">Sneklar</option>
+                  <option value="Yeguliklar">Yeguliklar</option>
+                </select>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Sotuv Narxi (so'm):</label>
+                  <input
+                    type="number"
+                    required
+                    value={editProdData.price}
+                    onChange={(e) => setEditProdData({ ...editProdData, price: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Ombordagi Soni (Stock):</label>
+                  <input
+                    type="number"
+                    required
+                    value={editProdData.stock}
+                    onChange={(e) => setEditProdData({ ...editProdData, stock: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" className="btn-cancel" onClick={() => setEditProdModal(null)}>
+                  Bekor Qilish
+                </button>
+                <button type="submit" className="btn-add-primary">
+                  Saqlash
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

@@ -348,7 +348,7 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Add Product to Session
+  // Add Product to Session (AUTOMATIC STOCK DEDUCTION IN SUPABASE DB & STATE)
   const addProductToSession = async (deviceId, product, quantity = 1) => {
     const session = activeSessions[deviceId];
     if (!session) return;
@@ -359,10 +359,14 @@ export const AppProvider = ({ children }) => {
       return;
     }
 
+    const newStock = currentProd.stock - quantity;
+
+    // 1. Update state
     setProducts((prev) =>
-      prev.map((p) => (p.id === product.id ? { ...p, stock: p.stock - quantity } : p))
+      prev.map((p) => (p.id === product.id ? { ...p, stock: newStock } : p))
     );
 
+    // 2. Add or increment order in session
     setActiveSessions((prev) => {
       const currentSess = prev[deviceId];
       if (!currentSess) return prev;
@@ -398,17 +402,18 @@ export const AppProvider = ({ children }) => {
       };
     });
 
+    // 3. Direct Supabase Database Stock Update
     try {
       await supabase
         .from('products')
-        .update({ stock: currentProd.stock - quantity })
+        .update({ stock: newStock })
         .eq('id', product.id);
     } catch (e) {
       console.warn('Supabase stock update error:', e);
     }
   };
 
-  // Remove Product from Session
+  // Remove Product from Session (AUTOMATIC STOCK RESTORATION IN SUPABASE DB & STATE)
   const removeProductFromSession = async (deviceId, orderId, decreaseQty = 1) => {
     const session = activeSessions[deviceId];
     if (!session) return;
@@ -416,10 +421,15 @@ export const AppProvider = ({ children }) => {
     const orderItem = session.orders.find((o) => o.id === orderId);
     if (!orderItem) return;
 
+    const currentProd = products.find((p) => p.id === orderItem.product_id);
+    const newStock = (currentProd ? currentProd.stock : 0) + decreaseQty;
+
+    // 1. Restore stock in state
     setProducts((prev) =>
-      prev.map((p) => (p.id === orderItem.product_id ? { ...p, stock: p.stock + decreaseQty } : p))
+      prev.map((p) => (p.id === orderItem.product_id ? { ...p, stock: newStock } : p))
     );
 
+    // 2. Update session orders
     setActiveSessions((prev) => {
       const currentSess = prev[deviceId];
       if (!currentSess) return prev;
@@ -448,14 +458,12 @@ export const AppProvider = ({ children }) => {
       };
     });
 
+    // 3. Direct Supabase Database Stock Restore
     try {
-      const currentProd = products.find((p) => p.id === orderItem.product_id);
-      if (currentProd) {
-        await supabase
-          .from('products')
-          .update({ stock: currentProd.stock + decreaseQty })
-          .eq('id', orderItem.product_id);
-      }
+      await supabase
+        .from('products')
+        .update({ stock: newStock })
+        .eq('id', orderItem.product_id);
     } catch (e) {
       console.warn('Supabase restore stock error:', e);
     }
@@ -517,7 +525,7 @@ export const AppProvider = ({ children }) => {
     await endSession(deviceId, 'cash');
   };
 
-  // Product & Device management
+  // Product Management (Add, Edit, Delete, Restock)
   const addProduct = async (newProd) => {
     const created = {
       id: 'p_' + Date.now(),
@@ -532,6 +540,50 @@ export const AppProvider = ({ children }) => {
       await supabase.from('products').insert([created]);
     } catch (e) {
       console.warn('Supabase add product error:', e);
+    }
+  };
+
+  const updateProduct = async (productId, updatedFields) => {
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === productId
+          ? {
+              ...p,
+              ...updatedFields,
+              price: updatedFields.price !== undefined ? Number(updatedFields.price) : p.price,
+              stock: updatedFields.stock !== undefined ? Number(updatedFields.stock) : p.stock,
+              min_stock_alert: updatedFields.min_stock_alert !== undefined ? Number(updatedFields.min_stock_alert) : p.min_stock_alert,
+            }
+          : p
+      )
+    );
+
+    try {
+      await supabase
+        .from('products')
+        .update({
+          ...updatedFields,
+          price: updatedFields.price !== undefined ? Number(updatedFields.price) : undefined,
+          stock: updatedFields.stock !== undefined ? Number(updatedFields.stock) : undefined,
+          min_stock_alert: updatedFields.min_stock_alert !== undefined ? Number(updatedFields.min_stock_alert) : undefined,
+        })
+        .eq('id', productId);
+    } catch (e) {
+      console.warn('Supabase update product error:', e);
+    }
+  };
+
+  const deleteProduct = async (productId) => {
+    if (!window.confirm("Haqiqatan ham ushbu mahsulotni ombordan o'chirmoqchimisiz?")) {
+      return;
+    }
+
+    setProducts((prev) => prev.filter((p) => p.id !== productId));
+
+    try {
+      await supabase.from('products').delete().eq('id', productId);
+    } catch (e) {
+      console.warn('Supabase delete product error:', e);
     }
   };
 
@@ -611,6 +663,8 @@ export const AppProvider = ({ children }) => {
         endSession,
         adminForceEndSession,
         addProduct,
+        updateProduct,
+        deleteProduct,
         restockProduct,
         updateDeviceRate,
         addDevice,
